@@ -10,12 +10,16 @@ router.register("client",ClientViewSet)
 router.register("responsable",ResponsableViewSet)
 router.register("salle",SalleViewSet)
 router.register("produit",ProduitViewSet)
+router.register("achat",AchatViewset)
 router.register("poulle_vendu",PoulleVenduViewSet)
 router.register("poulle_morte",PoulleMorteViewSet)
+router.register("prix",PrixViewSet)
+router.register("prix-poulet",PrixpouletViewSet)
 router.register("oeuf",OeufViewSet)
 router.register("oeuf_vendu",OeufVenduViewSet)
 router.register("perte",PerteViewSet)
 router.register("ration",RationViewSet)
+router.register("transaction",TransferViewSet)
 
 urlpatterns = [
 	path('', include(router.urls)),

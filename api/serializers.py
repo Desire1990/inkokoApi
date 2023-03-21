@@ -10,16 +10,30 @@ from django.contrib.auth.hashers import check_password
 
 
 class TokenPairSerializer(TokenObtainPairSerializer):
+
+	def getGroups(self, user):
+		groups = []
+		if user.is_superuser:
+			groups.append("admin")
+		for group in user.groups.all():
+			groups.append(group.name)
+		return groups
+
 	def validate(self, attrs):
 		data = super(TokenPairSerializer, self).validate(attrs)
-		data['groups'] = [group.name for group in self.user.groups.all()]
-		data['id'] = self.user.id
+		data['services'] = [group.name for group in self.user.groups.all()]
+		data['is_admin'] = self.user.is_superuser
+		data['groups'] = self.getGroups(self.user)
 		data['username'] = self.user.username
-		data['first_name'] = self.user.first_name
-		data['last_name'] = self.user.last_name
-		data['is_staff'] = self.user.is_staff
+		data['id'] = self.user.id
+		logins = LastLogin.objects.all()
+		if(logins):
+			last_login = logins.first()
+			last_login.date = timezone.now()
+			last_login.save()
+		else:
+			LastLogin().save()
 		return data
-
 
 class GroupSerializer(serializers.ModelSerializer):
 
@@ -29,39 +43,22 @@ class GroupSerializer(serializers.ModelSerializer):
 		depth=2
 
 
+
 class UserSerializer(serializers.ModelSerializer):
-	@transaction.atomic()
-	def update(self, instance, validated_data):
-		user = instance
-		username = validated_data.get('username')
-		first_name = validated_data.get('first_name')
-		last_name = validated_data.get('last_name')
-		nouv_password = validated_data.get('nouv_password')
-		anc_password = validated_data.get('anc_password')
-		if check_password(anc_password, self.context['request'].user.password):
-			if username:
-				user.username = username
-			if first_name:
-				user.first_name = first_name
-			if last_name:
-				user.last_name = last_name
-			if password:
-				user.set_password(password)
-			user.save()
-			return user
-		return user
+	password = serializers.CharField(write_only=True)
+	groups = serializers.SerializerMethodField()
+
+	def get_groups(self, user):
+		groups = []
+		if user.is_superuser:
+			groups.append("admin")
+		for group in user.groups.all():
+			groups.append(group.name)
+		return groups
 
 	class Meta:
 		model = User
-		read_only_fields = "is_active", "is_staff"
-		exclude = "last_login", "is_staff", "date_joined"
-		extra_kwargs = {
-			'username': {
-				'validators': [UnicodeUsernameValidator()]
-			}
-		}
-
-
+		exclude = "last_login","is_staff","email","date_joined","user_permissions"
 
 class ClientSerializer(serializers.ModelSerializer):
 	class Meta:
@@ -81,7 +78,7 @@ class SalleSerializer(serializers.ModelSerializer):
 	class Meta:
 		model = Salle
 		fields = '__all__'
-		# depth=1
+		depth=1
 
 
 class ProduitSerializer(serializers.ModelSerializer):
@@ -90,12 +87,28 @@ class ProduitSerializer(serializers.ModelSerializer):
 		fields = '__all__'
 		# depth=1
 
+class AchatSerializer(serializers.ModelSerializer):
+	produit_id = serializers.SerializerMethodField()
+
+	def to_representation(self, obj):
+		representation = super().to_representation(obj)
+		representation['produit'] = str(obj.produit)
+		representation['user'] = str(obj.user)
+		return representation
+
+	def get_produit_id(self, obj):
+		return obj.produit.id
+
+	class Meta:
+		model = Achat
+		fields = "__all__"
+		read_only_fields = "date", "user", "prix_unitaire"
 
 class RationSerializer(serializers.ModelSerializer):
 	class Meta:
 		model = Ration
 		fields = '__all__'
-		# depth=1
+		depth=1
 
 
 class PoulleMorteSerializer(serializers.ModelSerializer):
@@ -111,11 +124,23 @@ class PoulleVenduSerializer(serializers.ModelSerializer):
 		fields = '__all__'
 		# depth=1
 
+class PrixSerializer(serializers.ModelSerializer):
+	class Meta:
+		model = Prix
+		fields = '__all__'
+		# depth=1
+		
+class PouletPrixSerializer(serializers.ModelSerializer):
+	class Meta:
+		model = PouletPrix
+		fields = '__all__'
+		# depth=1
+
 class OeufSerializer(serializers.ModelSerializer):
 	class Meta:
 		model = Oeuf
 		fields = '__all__'
-		# depth=1
+		depth=1
 
 class OeufVenduSerializer(serializers.ModelSerializer):
 	class Meta:
@@ -128,3 +153,9 @@ class PerteSerializer(serializers.ModelSerializer):
 		model = Perte
 		fields = '__all__'
 		# depth=1
+
+class TransferSerializer(serializers.ModelSerializer):
+	class Meta:
+		model = Transfer
+		fields = '__all__'
+		depth=1
