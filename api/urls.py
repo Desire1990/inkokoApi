@@ -20,6 +20,9 @@ router.register("oeuf_vendu",OeufVenduViewSet)
 router.register("perte",PerteViewSet)
 router.register("ration",RationViewSet)
 router.register("transaction",TransferViewSet)
+router.register("vente",VenteViewSet)
+router.register("last_login",LastLoginViewset)
+router.register("statistic", StatsViewSet, basename='stats')
 
 urlpatterns = [
 	path('', include(router.urls)),
