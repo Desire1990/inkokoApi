@@ -7,6 +7,7 @@ from django.contrib.auth.models import Group
 from rest_framework.response import Response
 from django.contrib.auth.models import User
 from django.contrib.auth.hashers import check_password
+from django.db.models import Sum
 
 
 class TokenPairSerializer(TokenObtainPairSerializer):
@@ -42,6 +43,16 @@ class GroupSerializer(serializers.ModelSerializer):
 		fields = "__all__"
 		depth=2
 
+class LastLoginSerializer(serializers.ModelSerializer):
+
+	def to_representation(self, obj):
+		representation = super().to_representation(obj)
+		representation['user'] = str(obj.user)
+		return representation
+		
+	class Meta:
+		model = LastLogin
+		fields = "__all__"
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -75,6 +86,12 @@ class ResponsableSerializer(serializers.ModelSerializer):
 
 
 class SalleSerializer(serializers.ModelSerializer):
+	total = serializers.SerializerMethodField()
+
+
+	def get_total(self, obj):
+		totaux= Salle.objects.all().aggregate(total=Sum('quantite_oeuf'))
+		return totaux["total"]
 	class Meta:
 		model = Salle
 		fields = '__all__'
@@ -103,8 +120,53 @@ class AchatSerializer(serializers.ModelSerializer):
 		model = Achat
 		fields = "__all__"
 		read_only_fields = "date", "user", "prix_unitaire"
+		depth=1
+
+class VenteSerializer(serializers.ModelSerializer):
+	commande_id = serializers.SerializerMethodField()
+	produit_id = serializers.SerializerMethodField()
+
+	def to_representation(self, obj):
+		representation = super().to_representation(obj)
+		representation['produit'] = str(obj.produit)
+		representation['commande'] = str(obj.commande)
+		return representation
+
+	def get_produit_id(self, obj):
+		return obj.produit.id
+
+	def get_commande_id(self, obj):
+		return obj.commande.id	
+
+	class Meta:
+		model = Vente
+		fields = '__all__'
 
 class RationSerializer(serializers.ModelSerializer):
+	user_id = serializers.SerializerMethodField()
+	responsable_id = serializers.SerializerMethodField()
+	user = serializers.ReadOnlyField()
+
+	def to_representation(self, obj):
+		representation = super(RationSerializer, self).to_representation(obj)
+		representation['user'] = str(obj.user)
+		representation['responsable'] = str(obj.responsable)
+		last_login = LastLogin.objects.first()
+		try:
+			last_login = LastLogin.objects.first()
+			last_login.date = timezone.now()
+		except:
+			last_login = LastLogin()
+			last_login.save()
+		return representation
+
+	def get_user_id(self, obj):
+		return obj.user.id
+
+	def get_responsable_id(self, obj):
+		if(obj.responsable): return obj.responsable.id
+		return None
+
 	class Meta:
 		model = Ration
 		fields = '__all__'
@@ -143,16 +205,57 @@ class OeufSerializer(serializers.ModelSerializer):
 		depth=1
 
 class OeufVenduSerializer(serializers.ModelSerializer):
+	user_id = serializers.SerializerMethodField()
+	client_id = serializers.SerializerMethodField()
+	prix_id = serializers.SerializerMethodField()
+	user = serializers.ReadOnlyField()
+
+	def to_representation(self, obj):
+		representation = super(OeufVenduSerializer, self).to_representation(obj)
+		representation['user'] = str(obj.user)
+		representation['client'] = str(obj.client)
+		representation['prix'] = str(obj.prix)
+		last_login = LastLogin.objects.first()
+		try:
+			last_login = LastLogin.objects.first()
+			last_login.date = timezone.now()
+		except:
+			last_login = LastLogin()
+			last_login.save()
+		return representation
+
+	def get_user_id(self, obj):
+		return obj.user.id
+
+	def get_client_id(self, obj):
+		if(obj.client): return obj.client.id
+		return None
+	def get_prix_id(self, obj):
+		if(obj.prix): return obj.prix.id
+		return None
+
 	class Meta:
-		model = OeufVendu
+		model = Commande
 		fields = '__all__'
 		# depth=1
 
 class PerteSerializer(serializers.ModelSerializer):
+	salle_id = serializers.SerializerMethodField()
+
+	def to_representation(self, obj):
+		representation = super().to_representation(obj)
+		representation['salle'] = str(obj.salle)
+		# representation['user'] = str(obj.user)
+		return representation
+
+	def get_salle_id(self, obj):
+		return obj.salle.id
+
 	class Meta:
 		model = Perte
 		fields = '__all__'
-		# depth=1
+		read_only_fields = "date", 
+		depth=1
 
 class TransferSerializer(serializers.ModelSerializer):
 	class Meta:
