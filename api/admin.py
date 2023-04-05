@@ -1,6 +1,4 @@
 from django.contrib import admin
-
-# Register your models here.
 from .models import *
 
 
@@ -12,6 +10,6 @@ admin.site.register(Ration)
 admin.site.register(PoulleVendu)
 admin.site.register(PoulleMorte)
 admin.site.register(Oeuf)
-admin.site.register(OeufVendu)
+admin.site.register(Commande)
 admin.site.register(Perte)
 admin.site.register(Prix)
