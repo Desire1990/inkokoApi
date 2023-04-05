@@ -12,6 +12,18 @@ class Pagination(PageNumberPagination):
 			('num_page', self.page.paginator.num_pages),
 			('results', data)
 		]))
+class LastLoginViewset(mixins.ListModelMixin,
+					viewsets.GenericViewSet):
+	queryset = LastLogin.objects.all()
+	def list(self, request, *args, **kwargs):
+		logins = LastLogin.objects.all()
+		if(logins):
+			last_login = logins.first()
+		else:
+			last_login = LastLogin()
+			last_login.save()
+		serializer = LastLoginSerializer(last_login, many=False)
+		return Response(serializer.data, 204)
 
 class TokenPairView(TokenObtainPairView):
 	serializer_class = TokenPairSerializer
@@ -113,12 +125,6 @@ class ResponsableViewSet(viewsets.ModelViewSet):
 	serializer_class = ResponsableSerializer
 
 
-class SalleViewSet(viewsets.ModelViewSet):
-	authentication_classes = [JWTAuthentication, SessionAuthentication]
-	permission_classes = IsAuthenticated,
-	queryset = Salle.objects.all()
-	serializer_class = SalleSerializer
-
 
 class SalleViewSet(viewsets.ModelViewSet):
 	authentication_classes = (SessionAuthentication, JWTAuthentication)
@@ -134,8 +140,17 @@ class SalleViewSet(viewsets.ModelViewSet):
 
 	@transaction.atomic
 	def create(self, request):
-		data = self.request.data
-		responsable: Responsable = Responsable.objects.get(telephone=(data.get('responsable')))
+		data = request.data
+		prix:PouletPrix=PouletPrix.objects.all().latest('id')
+		dict_responsable = data.get("responsable")
+		responsable = None
+		if(dict_responsable.get("telephone")):
+			responsable, created = Responsable.objects.get_or_create(
+				telephone = dict_responsable.get("telephone")
+			)
+			if(not responsable.nom):
+				responsable.nom = dict_responsable.get("nom")
+				responsable.save()
 		nom = (data.get('nom'))
 		type_poulle = (data.get('type_poulle'))
 		quantite = (data.get('quantite'))
@@ -144,7 +159,8 @@ class SalleViewSet(viewsets.ModelViewSet):
 			nom=nom,
 			responsable=responsable,
 			type_poulle=type_poulle,
-			quantite=quantite
+			quantite=quantite,
+			prix=prix
 			)
 		salle.save()
 		serializer = SalleSerializer(salle, many=False, context={"request":request}).data
@@ -159,7 +175,7 @@ class ProduitViewSet(mixins.ListModelMixin,
 					viewsets.GenericViewSet):
 	authentication_classes = (SessionAuthentication, JWTAuthentication)
 	permission_classes = [IsAuthenticated]
-	queryset = Produit.objects.all().order_by("designation")
+	queryset = Produit.objects.all().order_by("nom")
 	serializer_class = ProduitSerializer
 
 	@transaction.atomic
@@ -267,11 +283,143 @@ class AchatViewset(viewsets.ModelViewSet):
 		return Response(query)
 
 
-class RationViewSet(viewsets.ModelViewSet):
-	authentication_classes = [JWTAuthentication, SessionAuthentication]
-	permission_classes = IsAuthenticated,
-	queryset = Ration.objects.all()
+
+class RationViewSet(mixins.RetrieveModelMixin,
+					  mixins.ListModelMixin,
+					  mixins.CreateModelMixin,
+					  viewsets.GenericViewSet):
+	authentication_classes = (SessionAuthentication, JWTAuthentication)
+	permission_classes = [IsAuthenticated]
+	queryset = Ration.objects.select_related("responsable").all()
 	serializer_class = RationSerializer
+
+	def list(self, request, *args, **kwargs):
+		str_du = request.query_params.get('du')
+		str_au = request.query_params.get('au')
+		if bool(str_du) & bool(str_au):
+			du = datetime.strptime(str_du, "%Y-%m-%d").date()
+			au = datetime.strptime(str_au, "%Y-%m-%d").date()+timedelta(days=1)
+		else:
+			du = date.today()-timedelta(days=7)
+			au = date.today()+timedelta(days=1)
+		self.queryset = self.queryset.filter(
+			date__gte=du, date__lte=au
+		)
+		return super().list(request, *args, **kwargs)
+
+	@transaction.atomic
+	def create(self, request, *args, **kwargs):
+		data = request.data
+		dict_responsable = data.get("responsable")
+		responsable = None
+		if(dict_responsable.get("telephone")):
+			responsable, created = Responsable.objects.get_or_create(
+				telephone = dict_responsable.get("telephone")
+			)
+			if(not responsable.nom):
+				responsable.nom = dict_responsable.get("nom")
+				responsable.save()
+		str_payee = data.get("payee")
+		a_payer = int(data.get("a_payer"))
+		payee = int(str_payee) if str_payee else 0
+		commande = Ration(
+			user=request.user, a_payer=a_payer, responsable=responsable,
+			payee=payee, reste=a_payer-payee
+		)
+		commande.save()
+		for item in data.get("items"):
+			produit:Produit = Produit.objects.get(id=item.get("id"))
+			quantite = float(item.get("quantite"))
+			vente = Vente(
+				produit=produit, commande=commande, quantite=quantite,
+				prix_vente=produit.prix_total, prix_achat=produit.prix_unitaire, 
+			)
+			vente.save()
+			produit.quantite-=quantite
+			produit.save();
+		# if payee:
+		# 	Paiement.objects.create(commande=commande, somme=payee, validated=True)
+		serializer = self.serializer_class(commande, many=False)
+		return Response(serializer.data, 201)
+
+	@action(methods=['GET'], detail=False, url_name=r'dettes',
+		url_path=r"dettes/(?P<since>\d{4}-\d{2}-\d{2})/(?P<to>\d{4}-\d{2}-\d{2})")
+	def dettes(self, request, since, to):
+		since = datetime.strptime(since, "%Y-%m-%d").date()
+		to = datetime.strptime(to, "%Y-%m-%d").date()+timedelta(days=1)
+		queryset = self.queryset.filter(
+			date__gte=since, date__lte=to, reste__gt=0
+		)
+		serializer = self.serializer_class(queryset, many=True)
+		return Response(serializer.data)
+
+	@action(methods=['GET'], detail=False, url_path=r"dettes",
+		url_name=r'today_dettes')
+	def weekDettes(self, request):
+		last_today = datetime.today()-timedelta(days=7)
+		last_today_str = last_today.strftime("%Y-%m-%d")
+		today = datetime.today().strftime("%Y-%m-%d")
+		print(today)
+		return self.dettes(request, last_today_str, today)
+		
+
+class VenteViewSet(viewsets.ModelViewSet):
+	authentication_classes = (SessionAuthentication, JWTAuthentication)
+	permission_classes = [IsAuthenticated]
+	queryset = Vente.objects.select_related("produit", "commande").all()
+	serializer_class = VenteSerializer
+	filter_backends = filters.DjangoFilterBackend, SearchFilter
+	search_fields = "produit__nom",
+	filterset_fields = {
+		'prix_achat': ['gte', 'lte', 'isnull'],
+		'prix_vente': ['gte', 'lte'],
+		'commande__date': ['gte', 'lte'],
+		'commande': ['exact'],
+	}
+
+	# def list(self, request, *args, **kwargs):
+	# 	commande_id = request.query_params.get('commande')
+	# 	if(commande_id):
+	# 		self.queryset = self.queryset.filter(commande__id=commande_id)
+	# 	return super(VenteViewset, self).list(request, *args, **kwargs)
+
+	@transaction.atomic
+	def update(self, request, *args, **kwargs):
+		vente:Vente = self.get_object()
+		produit:Produit = vente.produit
+		commande:Commande = vente.commande
+		data = request.data
+		quantite = float(data.get("quantite"))
+
+		if quantite:
+			produit.quantite += vente.quantite
+			produit.quantite -= quantite
+			commande.a_payer -= vente.prix_vente*vente.quantite
+			commande.a_payer += vente.prix_vente*quantite
+			vente.quantite = quantite
+
+		vente.save()
+		produit.save()
+		commande.save()
+		serializer = VenteSerializer(vente, many=False)
+		return Response(serializer.data, 201)
+
+	def patch(self, request, *args, **kwargs):
+		return self.update(request, *args, **kwargs)
+
+	@transaction.atomic
+	def destroy(self, request, *args, **kwargs):
+		vente = self.get_object()
+		produit = vente.produit
+		commande = vente.commande
+
+		produit.quantite += vente.quantite
+		commande.a_payer -= vente.prix_vente
+		produit.save()
+		commande.save()
+		vente.delete()
+		return Response(None, 204)
+			
 
 class PoulleVenduViewSet(viewsets.ModelViewSet):
 	authentication_classes = [JWTAuthentication, SessionAuthentication]
@@ -308,7 +456,6 @@ class OeufViewSet(viewsets.ModelViewSet):
 		serializer = self.get_serializer(data=request.data)
 		serializer.is_valid(raise_exception=True)
 		data = request.data
-
 		salle:Salle = Salle.objects.get(id=data.get("salle"))
 		quantite = float(data.get("quantite"))
 
@@ -320,7 +467,7 @@ class OeufViewSet(viewsets.ModelViewSet):
 		salle.quantite_oeuf += float(oeuf.quantite)
 		salle.save();
 
-		serializer = self.serializer_class(salle, many=False)
+		serializer = self.serializer_class(oeuf, many=False)
 		return Response(serializer.data, 201)
 
 	@transaction.atomic
@@ -347,14 +494,6 @@ class OeufViewSet(viewsets.ModelViewSet):
 	def patch(self, request, *args, **kwargs):
 		return self.update(request, *args, **kwargs)
 
-	@transaction.atomic
-	def destroy(self, request, *args, **kwargs):
-		achat = self.get_object()
-		produit = achat.produit
-		produit.quantite += achat.quantite
-		produit.save()
-		achat.delete()
-		return Response(None, 204)
 
 	@action(methods=['GET'], detail=False, url_name=r'achatsfilter',
 		url_path=r"achatsfilter/(?P<since>\d{4}-\d{2}-\d{2})/(?P<to>\d{4}-\d{2}-\d{2})")
@@ -381,14 +520,134 @@ class OeufViewSet(viewsets.ModelViewSet):
 class OeufVenduViewSet(viewsets.ModelViewSet):
 	authentication_classes = [JWTAuthentication, SessionAuthentication]
 	permission_classes = IsAuthenticated,
-	queryset = OeufVendu.objects.all()
+	queryset = Commande.objects.all()
 	serializer_class = OeufVenduSerializer
 
+
+	def list(self, request, *args, **kwargs):
+		str_du = request.query_params.get('du')
+		str_au = request.query_params.get('au')
+		if bool(str_du) & bool(str_au):
+			du = datetime.strptime(str_du, "%Y-%m-%d").date()
+			au = datetime.strptime(str_au, "%Y-%m-%d").date()+timedelta(days=1)
+		else:
+			du = date.today()-timedelta(days=7)
+			au = date.today()+timedelta(days=1)
+		self.queryset = self.queryset.filter(
+			date__gte=du, date__lte=au
+		)
+		return super().list(request, *args, **kwargs)
+
+	@transaction.atomic
+	def create(self, request, *args, **kwargs):
+		data = request.data
+		salle:Salle = Salle.objects.all().latest('id')
+		prix:Prix = Prix.objects.all().latest('id')
+		dict_client = data.get("client")
+		client = None
+		if(dict_client.get("tel")):
+			client, created = Client.objects.get_or_create(
+				tel = dict_client.get("tel")
+			)
+			if(not client.nom):
+				client.nom = dict_client.get("nom")
+				client.save()
+		quantite = (data.get("quantite"))
+		oeufvendu = Commande(
+			user=request.user, quantite=quantite, client=client, salle=salle, prix=prix
+		)
+		salle.quantite_oeuf-=float(oeufvendu.quantite)
+		salle.save()
+		oeufvendu.save()
+		serializer = self.serializer_class(oeufvendu, many=False)
+		return Response(serializer.data, 201)
+
 class PerteViewSet(viewsets.ModelViewSet):
-	authentication_classes = [JWTAuthentication, SessionAuthentication]
-	permission_classes = IsAuthenticated,
+	authentication_classes = (SessionAuthentication, JWTAuthentication)
+	permission_classes = [IsAuthenticated]
 	queryset = Perte.objects.all()
 	serializer_class = PerteSerializer
+
+	def list(self, request, *args, **kwargs):
+		str_du = request.query_params.get('du')
+		str_au = request.query_params.get('au')
+		if bool(str_du) & bool(str_au):
+			du = datetime.strptime(str_du, "%Y-%m-%d").date()
+			au = datetime.strptime(str_au, "%Y-%m-%d").date()
+		else:
+			du = date.today()-timedelta(days=7)
+			au = date.today()+timedelta(days=1)
+		self.queryset = self.queryset.filter(
+			date__gte=du, date__lte=au
+		)
+		return super().list(request, *args, **kwargs)
+
+	@transaction.atomic
+	def create(self, request, *args, **kwargs):
+		serializer = self.get_serializer(data=request.data)
+		serializer.is_valid(raise_exception=True)
+		data = request.data
+		salle = Salle.objects.get(id=data.get("salle"))
+		quantite = float(data.get("quantite"))
+		prix_unitaire = float(data.get("prix_unitaire"))
+		perte = Perte(
+			user =request.user, salle=salle, quantite=quantite,prix_unitaire=prix_unitaire,
+			commentaire=data.get("commentaire")
+		)
+		perte.prix_vente+=float(salle.prix.prix)*perte.quantite
+		salle.quantite -= perte.quantite
+		perte.save()
+		salle.save()
+		serializer = PerteSerializer(perte, many=False)
+		return Response(serializer.data, 201)
+
+	def patch(self, request, *args, **kwargs):
+		return self.update(request, *args, **kwargs)
+
+	@transaction.atomic
+	def destroy(self, request, *args, **kwargs):
+		perte = self.get_object()
+		if perte.validated:
+			return Response({'status': "the validated one cannot be deleted"}, 400)
+
+		perte.salle.quantite += perte.quantite
+		perte.salle.save()
+		perte.delete()
+		serializer = PerteSerializer(perte, many=False)
+		return Response(serializer.data, 201)
+
+	@action(methods=['GET'], detail=False, url_name=r'perte_stats',url_path=r"stats")
+	def stats_today(self, request):
+		last_today =(datetime.today()-timedelta(days=30)).strftime("%Y-%m-%d")
+		today = date.today().strftime("%Y-%m-%d")
+		return self.stats_date(request, last_today, today)
+
+	@action(methods=['GET'], detail=False, url_name=r'perte_stats_date',
+		url_path=r"stats/(?P<du>\d{4}-\d{2}-\d{2})/(?P<au>\d{4}-\d{2}-\d{2})")
+	def stats_date(self, request, du, au):
+		du = datetime.strptime(du, "%Y-%m-%d").date()
+		au = datetime.strptime(au, "%Y-%m-%d").date()+timedelta(days=1)
+		query = []
+
+		with connection.cursor() as cursor:
+			cursor.execute(f"""
+				SELECT
+					P.id, P.nom as salle, SUM(Perte.quantite) as quantite,
+					SUM(Perte.quantite*Perte.prix_unitaire) AS total
+				FROM 
+					api_salle as P, api_perte AS Perte
+				WHERE
+					Perte.date between "{du}" AND "{au}" AND
+					P.id = Perte.salle_id AND Perte.validated=1
+				GROUP BY P.id;
+			""")
+			columns = [col[0] for col in cursor.description]
+			query = [
+				dict(zip(columns, row))
+				for row in cursor.fetchall()
+			]
+		return Response(query)
+
 
 class TransferViewSet(viewsets.ModelViewSet):
 	authentication_classes = [JWTAuthentication, SessionAuthentication]
@@ -396,6 +655,19 @@ class TransferViewSet(viewsets.ModelViewSet):
 	queryset = Transfer.objects.all()
 	serializer_class = TransferSerializer
 
+	def list(self, request, *args, **kwargs):
+		str_du = request.query_params.get('du')
+		str_au = request.query_params.get('au')
+		if bool(str_du) & bool(str_au):
+			du = datetime.strptime(str_du, "%Y-%m-%d").date()
+			au = datetime.strptime(str_au, "%Y-%m-%d").date()+timedelta(days=1)
+		else:
+			du = date.today()-timedelta(days=7)
+			au = date.today()+timedelta(days=1)
+		self.queryset = self.queryset.filter(
+			date__gte=du, date__lte=au
+		)
+		return super().list(request, *args, **kwargs)
 
 	@transaction.atomic
 	def create(self, request):
@@ -435,3 +707,80 @@ class TransferViewSet(viewsets.ModelViewSet):
 		print(transaction)
 		transaction.save()
 		return Response({"status": "transaction validée avec success"}, 201)
+
+# stats
+class StatsViewSet(viewsets.ViewSet):
+	authentication_classes = [SessionAuthentication, JWTAuthentication]
+	permission_classes = [IsAuthenticated]
+
+	@action(methods=['GET'], detail=False, url_name=r'products',
+		url_path=r"products")
+	def weekSolded(self, request):
+		last_today =(datetime.today()-timedelta(days=7)).strftime("%Y-%m-%d")
+		today = date.today().strftime("%Y-%m-%d")
+		return self.solded(request, last_today, today)
+
+	@action(methods=['GET'], detail=False, url_name=r'clients',
+		url_path=r"clients/(?P<du>\d{4}-\d{2}-\d{2})/(?P<au>\d{4}-\d{2}-\d{2})")
+	def client(self, request, du, au):
+		du = datetime.strptime(du, "%Y-%m-%d").date()
+		au = datetime.strptime(au, "%Y-%m-%d").date()+timedelta(days=1)
+		query = []
+		with connection.cursor() as cursor:
+			cursor.execute(f"""
+				SELECT
+					C.id, C.nom, C.tel, COUNT (COM.id) AS commande ,
+					SUM(COM.prix*COM.quantite) AS total 
+				FROM 
+					api_client as C, api_commande AS COM
+				WHERE
+					date between "{du}" AND "{au}" AND
+					C.id = COM.client_id
+				GROUP BY C.id;
+			""")
+			columns = [col[0] for col in cursor.description]
+			query = [
+				dict(zip(columns, row))
+				for row in cursor.fetchall()
+			]
+		return Response(query)
+
+	@action(methods=['GET'], detail=False, url_name=r'clients',
+		url_path=r"clients")
+	def weekClient(self, request):
+		last_today =(datetime.today()-timedelta(days=7)).strftime("%Y-%m-%d")
+		today = date.today().strftime("%Y-%m-%d")
+		return self.client(request, last_today, today)
+
+	@action(methods=['GET'], detail=False, url_name=r'clients_dettes',
+		url_path=r"clients_dettes/(?P<du>\d{4}-\d{2}-\d{2})/(?P<au>\d{4}-\d{2}-\d{2})")
+	def clientsDettes(self, request, du, au):
+		du = datetime.strptime(du, "%Y-%m-%d").date()
+		au = datetime.strptime(au, "%Y-%m-%d").date()+timedelta(days=1)
+		query = []
+
+		with connection.cursor() as cursor:
+			cursor.execute(f"""
+				SELECT
+					C.id, C.nom, C.tel, SUM (COM.reste) AS tot_dete 
+				FROM 
+					api_client as C, api_oeufVendu AS COM
+				WHERE
+					date between "{du}" AND "{au}" AND
+					C.id = COM.client_id AND
+					COM.payee < COM.a_payer
+				GROUP BY C.id;
+			""")
+			columns = [col[0] for col in cursor.description]
+			query = [
+				dict(zip(columns, row))
+				for row in cursor.fetchall()
+			]
+		return Response(query)
+
+	@action(methods=['GET'], detail=False, url_name=r'clients_dettes',
+		url_path=r"clients_dettes")
+	def weekClientsDettes(self, request):
+		last_today =(datetime.today()-timedelta(days=7)).strftime("%Y-%m-%d")
+		today = date.today().strftime("%Y-%m-%d")
+		return self.clientsDettes(request, last_today, today)
