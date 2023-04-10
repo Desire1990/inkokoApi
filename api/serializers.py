@@ -181,6 +181,12 @@ class PoulleMorteSerializer(serializers.ModelSerializer):
 
 
 class PoulleVenduSerializer(serializers.ModelSerializer):
+
+	def to_representation(self, obj):
+		representation = super().to_representation(obj)
+		representation['client'] = str(obj.client)
+		representation['salle'] = str(obj.salle)
+		return representation
 	class Meta:
 		model = PoulleVendu
 		fields = '__all__'
@@ -258,7 +264,20 @@ class PerteSerializer(serializers.ModelSerializer):
 		depth=1
 
 class TransferSerializer(serializers.ModelSerializer):
+
+	# def to_representation(self, obj):
+	# 	representation = super().to_representation(obj)
+	# 	representation['taux'] = str(obj.taux)
+	# 	representation['user'] = str(obj.user)
+	# 	return representation
 	class Meta:
 		model = Transfer
+		fields = '__all__'
+		depth=1
+
+class TauxSerializer(serializers.ModelSerializer):
+
+	class Meta:
+		model = Taux
 		fields = '__all__'
 		depth=1
