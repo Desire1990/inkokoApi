@@ -421,11 +421,50 @@ class VenteViewSet(viewsets.ModelViewSet):
 		return Response(None, 204)
 			
 
+class TauxViewSet(viewsets.ModelViewSet):
+	authentication_classes = [JWTAuthentication, SessionAuthentication]
+	permission_classes = IsAuthenticated,
+	queryset = Taux.objects.all()
+	serializer_class = TauxSerializer			
+
 class PoulleVenduViewSet(viewsets.ModelViewSet):
 	authentication_classes = [JWTAuthentication, SessionAuthentication]
 	permission_classes = IsAuthenticated,
 	queryset = PoulleVendu.objects.all()
 	serializer_class = PoulleVenduSerializer
+
+	@transaction.atomic()
+	def create(self, request, *args, **kwargs):
+		data = request.data
+		dict_client = data.get("client")
+		client = None
+		if(dict_client.get("tel")):
+			client, created = Client.objects.get_or_create(
+				tel = dict_client.get("tel")
+			)
+			if(not client.nom):
+				client.nom = dict_client.get("nom")
+				client.save()
+		salle:Salle=Salle.objects.get(id=data.get("salle"))
+		# client:Client=Client.objects.get(id=data.get("client"))
+		quantite = float(data.get("quantite"))
+		poids = (data.get("poids"))
+		prix_unitaire = float(data.get("prix_unitaire"))
+		commentaire = (data.get("commentaire"))
+		pouletvendu = PoulleVendu(
+			quantite=quantite, 
+			client=client, 
+			salle=salle, 
+			prix_unitaire=prix_unitaire, 
+			poids=poids, 
+			commentaire=commentaire
+		)
+		salle.quantite-=float(pouletvendu.quantite)
+		pouletvendu.prix_total+=pouletvendu.prix_unitaire*pouletvendu.quantite
+		salle.save()
+		pouletvendu.save()
+		serializer = self.serializer_class(pouletvendu, many=False)
+		return Response(serializer.data, 201)
 
 class PrixpouletViewSet(viewsets.ModelViewSet):
 	authentication_classes = [JWTAuthentication, SessionAuthentication]
@@ -450,6 +489,22 @@ class OeufViewSet(viewsets.ModelViewSet):
 	permission_classes = IsAuthenticated,
 	queryset = Oeuf.objects.all()
 	serializer_class = OeufSerializer
+
+	
+	def list(self, request, *args, **kwargs):
+		str_du = request.query_params.get('du')
+		str_au = request.query_params.get('au')
+		if bool(str_du) & bool(str_au):
+			du = datetime.strptime(str_du, "%Y-%m-%d").date()
+			au = datetime.strptime(str_au, "%Y-%m-%d").date()+timedelta(days=1)
+		else:
+			du = date.today()-timedelta(days=7)
+			au = date.today()+timedelta(days=1)
+		self.queryset = self.queryset.filter(
+			date__gte=du, date__lte=au
+		)
+		return super().list(request, *args, **kwargs)
+
 
 	@transaction.atomic
 	def create(self, request, *args, **kwargs):
@@ -494,7 +549,7 @@ class OeufViewSet(viewsets.ModelViewSet):
 	def patch(self, request, *args, **kwargs):
 		return self.update(request, *args, **kwargs)
 
-
+ 
 	@action(methods=['GET'], detail=False, url_name=r'achatsfilter',
 		url_path=r"achatsfilter/(?P<since>\d{4}-\d{2}-\d{2})/(?P<to>\d{4}-\d{2}-\d{2})")
 	def achatsFilterDate(self, request, since, to):
@@ -672,19 +727,24 @@ class TransferViewSet(viewsets.ModelViewSet):
 	@transaction.atomic
 	def create(self, request):
 		data = self.request.data
+		taux = Taux.objects.all().latest('id')
 		nom = (data.get('nom'))
 		prenom = (data.get('prenom'))
 		adresse = (data.get('adresse'))
-		montant = (data.get('montant'))
+		montant_euro = float(data.get('montant_euro'))
 		telephone = (data.get('telephone'))
+		frais = float(data.get('frais'))
 		transaction = Transfer(
 			user=self.request.user,
+			taux=taux,
 			nom=nom,
 			prenom=prenom,
 			adresse=adresse,
-			montant=montant,
+			montant_euro=montant_euro,
 			telephone=telephone,
+			frais=frais,
 			)
+		transaction.montant_fbu+=(transaction.montant_euro*transaction.taux.taux)*transaction.frais/100
 		transaction.save()
 		serializer = TransferSerializer(transaction, many=False, context={"request":request}).data
 		return Response(serializer,200)
