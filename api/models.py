@@ -23,6 +23,7 @@ class Client(models.Model):
 	class Meta:
 		unique_together = ('nom', 'tel')
 
+
 	def __str__(self):
 		return f"{self.nom} {self.tel}"
 
@@ -35,6 +36,9 @@ class Responsable(models.Model):
 	class Meta:
 		unique_together = ('nom', 'telephone')
 
+	class Meta:
+		ordering='-pk',
+
 	def __str__(self):
 		return f"{self.nom} {self.telephone}"
 
@@ -43,6 +47,9 @@ class PouletPrix(models.Model):
 	id = models.SmallAutoField(primary_key=True)
 	prix = models.FloatField(default=30000)
 	date = models.DateTimeField(auto_now_add=True)
+
+	class Meta:
+		ordering='-pk',
 
 	def __str__(self):
 		return f"{self.prix}"
@@ -58,6 +65,9 @@ class Salle(models.Model):
 	quantite_oeuf = models.FloatField(default=0, editable=False)
 	date = models.DateTimeField(auto_now_add=True)
 
+	class Meta:
+		ordering='-pk',
+
 	def __str__(self):
 		return f"{self.nom}"
 
@@ -65,6 +75,9 @@ class Prix(models.Model):
 	id = models.SmallAutoField(primary_key=True)
 	prix = models.FloatField(default=500)
 	date = models.DateTimeField(auto_now_add=True)
+
+	class Meta:
+		ordering='-pk',
 
 	def __str__(self):
 		return f"{self.prix}"
@@ -79,6 +92,9 @@ class Oeuf(models.Model):
 	date = models.DateTimeField(auto_now_add=True)
 
 
+	class Meta:
+		ordering='-pk',
+
 	def __str__(self):
 		return f"{self.salle.nom} {self.quantite}"
 
@@ -90,6 +106,7 @@ class Produit(models.Model):
 	prix_unitaire = models.FloatField(default=0)
 	prix_total = models.FloatField(default=0, editable=False)
 	date = models.DateTimeField(auto_now_add=True)
+
 
 	def __str__(self):
 		return f"{self.nom}"
@@ -113,6 +130,7 @@ class Achat(models.Model):
 	prix_total = models.FloatField()
 	prix_unitaire = models.FloatField()
 
+
 	def __str__(self):
 		return f"{self.produit.nom} par {self.user.username}"
 
@@ -135,6 +153,7 @@ class Ration(models.Model):
 	reste = models.FloatField(default=0., editable=False)
 	uncommited = models.FloatField(default=0, editable=False)
 	date = models.DateTimeField(auto_now_add=True)
+
 
 
 	def __str__(self):
@@ -164,6 +183,9 @@ class Vente(models.Model):
 			raise Exception("Vente.quantite cannot be negative number")
 		super().save(*args, **kwargs)
 
+	class Meta:
+		ordering='-pk',
+
 	def __str__(self):
 		return f"{self.quantite} {self.produit} {self.commande.date}"
 
@@ -173,11 +195,16 @@ class PoulleVendu(models.Model):
 	id = models.SmallAutoField(primary_key=True)
 	salle = models.ForeignKey(Salle, on_delete=models.PROTECT)
 	client = models.ForeignKey(Client, on_delete=models.PROTECT)
+	poids = models.FloatField()
+	prix_unitaire = models.FloatField(default=0)
 	commentaire = models.CharField(max_length=200)
 	quantite = models.FloatField(default=0)
 	prix_total = models.FloatField(default=0, editable=False)
 	date = models.DateTimeField(auto_now_add=True)
 
+
+	class Meta:
+		ordering='-pk',
 
 	def __str__(self):
 		return f"{self.salle.nom} {self.quantite}"
@@ -201,6 +228,9 @@ class PoulleMorte(models.Model):
 	date = models.DateTimeField(auto_now_add=True)
 
 
+	class Meta:
+		ordering='-pk',
+
 	def __str__(self):
 		return f"{self.salle.nom} {self.quantite}"
 
@@ -212,6 +242,9 @@ class Commande(models.Model):
 	prix=models.ForeignKey(Prix, on_delete= models.PROTECT)
 	quantite = models.FloatField(default = 0, null=True)
 	date = models.DateTimeField(auto_now_add=True)
+
+	class Meta:
+		ordering='-pk',
 
 
 class Perte(models.Model):
@@ -225,20 +258,36 @@ class Perte(models.Model):
 	validated = models.BooleanField(default=False)
 	date = models.DateTimeField(blank=True, default=timezone.now)
 
+	class Meta:
+		ordering='-pk',
+
 	def __str__(self):
 		return f"{self.date}"
+
+class Taux(models.Model):
+	id = models.SmallAutoField(primary_key=True)
+	taux = models.FloatField(default=4000)
+	date = models.DateField(default=date.today)
+
+
+	def __str__(self):
+		return f"{self.taux}"
 
 
 class Transfer(models.Model):
 	id = models.SmallAutoField(primary_key=True)
 	user = models.ForeignKey(User, on_delete=models.PROTECT)
+	taux = models.ForeignKey(Taux, on_delete=models.PROTECT)
 	nom = models.CharField(max_length=200)
 	prenom = models.CharField(max_length=200)
 	adresse = models.CharField(max_length=200)
 	telephone = models.CharField(max_length=200)
-	montant = models.FloatField(default=0)
+	montant_euro = models.FloatField(default=0)
+	frais = models.FloatField()
+	montant_fbu = models.FloatField(default=0, editable=False)
 	validated = models.BooleanField(default=False)
 	date = models.DateTimeField(auto_now_add=True)
+
 
 	def __str__(self):
 		return f"{self.nom} {self.prenom}"
