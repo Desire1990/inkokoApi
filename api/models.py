@@ -273,6 +273,10 @@ class Taux(models.Model):
 	def __str__(self):
 		return f"{self.taux}"
 
+	class Meta:
+		ordering='-pk',
+
+
 
 class Transfer(models.Model):
 	id = models.SmallAutoField(primary_key=True)
