@@ -132,11 +132,8 @@ class SalleViewSet(viewsets.ModelViewSet):
 	permission_classes = IsAuthenticated,
 	queryset = Salle.objects.all()
 	serializer_class = SalleSerializer
-	# filter_backends = (filters.SearchFilter,)
-	# search_fields = ('nom',)
-
-	# def get_queryset(self):
-	# 	return Salle.objects.filter(user = self.request.user)
+	filter_backends = filters.DjangoFilterBackend,
+	filterset_fields = {'nom','type_poulle'}
 
 	@transaction.atomic
 	def create(self, request):
@@ -292,6 +289,10 @@ class RationViewSet(mixins.RetrieveModelMixin,
 	permission_classes = [IsAuthenticated]
 	queryset = Ration.objects.select_related("responsable").all()
 	serializer_class = RationSerializer
+	filter_backends = filters.DjangoFilterBackend,
+	filterset_fields = {
+		'date': ['gte', 'lte'],
+	}
 
 	def list(self, request, *args, **kwargs):
 		str_du = request.query_params.get('du')
@@ -673,7 +674,7 @@ class PerteViewSet(viewsets.ModelViewSet):
 
 	@action(methods=['GET'], detail=False, url_name=r'perte_stats',url_path=r"stats")
 	def stats_today(self, request):
-		last_today =(datetime.today()-timedelta(days=30)).strftime("%Y-%m-%d")
+		last_today =(datetime.today()-timedelta(days=7)).strftime("%Y-%m-%d")
 		today = date.today().strftime("%Y-%m-%d")
 		return self.stats_date(request, last_today, today)
 
@@ -726,8 +727,19 @@ class TransferViewSet(viewsets.ModelViewSet):
 
 	@transaction.atomic
 	def create(self, request):
-		data = self.request.data
-		taux = Taux.objects.all().latest('id')
+		data = request.data
+		taux:Taux=Taux.objects.all().latest('id')
+
+		# dict_taux = data.get("taux")
+		# taux = None
+		# if(dict_taux.get("telephone")):
+		# 	taux, created = Taux.objects.get_or_create(
+		# 		telephone = dict_taux.get("telephone")
+		# 	)
+		# 	if(not taux.nom):
+		# 		taux.nom = dict_taux.get("nom")
+		# 		taux.save()
+
 		nom = (data.get('nom'))
 		prenom = (data.get('prenom'))
 		adresse = (data.get('adresse'))
@@ -744,7 +756,7 @@ class TransferViewSet(viewsets.ModelViewSet):
 			telephone=telephone,
 			frais=frais,
 			)
-		transaction.montant_fbu+=(transaction.montant_euro*transaction.taux.taux)*transaction.frais/100
+		transaction.montant_fbu+=(transaction.montant_euro*transaction.taux.taux)-(transaction.montant_euro*transaction.taux.taux)*transaction.frais/100
 		transaction.save()
 		serializer = TransferSerializer(transaction, many=False, context={"request":request}).data
 		return Response(serializer,200)
