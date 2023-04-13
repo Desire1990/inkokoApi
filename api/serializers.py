@@ -265,11 +265,11 @@ class PerteSerializer(serializers.ModelSerializer):
 
 class TransferSerializer(serializers.ModelSerializer):
 
-	# def to_representation(self, obj):
-	# 	representation = super().to_representation(obj)
-	# 	representation['taux'] = str(obj.taux)
-	# 	representation['user'] = str(obj.user)
-	# 	return representation
+	def to_representation(self, obj):
+		representation = super().to_representation(obj)
+		representation['taux'] = str(obj.taux)
+		representation['user'] = str(obj.user)
+		return representation
 	class Meta:
 		model = Transfer
 		fields = '__all__'
