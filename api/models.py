@@ -253,6 +253,7 @@ class Perte(models.Model):
 	salle = models.ForeignKey(Salle, on_delete=models.PROTECT)
 	commentaire = models.CharField(max_length=300)
 	quantite = models.FloatField(default=0)
+	poids = models.FloatField(default=0)
 	prix_unitaire = models.FloatField(default=0)
 	prix_vente = models.FloatField(editable=False, default=0)
 	validated = models.BooleanField(default=False)
@@ -295,6 +296,32 @@ class Transfer(models.Model):
 
 	def __str__(self):
 		return f"{self.nom} {self.prenom}"
+
+	class Meta:
+		ordering='-pk',
+
+class Depense(models.Model):
+	id = models.SmallAutoField(primary_key=True)
+	user = models.ForeignKey(User, on_delete=models.PROTECT)
+	montant = models.FloatField(default=0)
+	motif = models.TextField()
+	date = models.DateTimeField(auto_now_add=True)
+
+	def __str__(self):
+		return f"{self.montant}"
+
+	class Meta:
+		ordering='-pk',
+
+class Payment(models.Model):
+	id = models.SmallAutoField(primary_key=True)
+	responsable = models.ForeignKey(Responsable, on_delete=models.PROTECT)
+	montant = models.FloatField(default=0)
+	motif = models.TextField()
+	date = models.DateTimeField(auto_now_add=True)
+
+	def __str__(self):
+		return f"{self.montant}"
 
 	class Meta:
 		ordering='-pk',
