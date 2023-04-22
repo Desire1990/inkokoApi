@@ -478,6 +478,62 @@ class PoulleMorteViewSet(viewsets.ModelViewSet):
 	permission_classes = IsAuthenticated,
 	queryset = PoulleMorte.objects.all()
 	serializer_class = PoulleMorteSerializer
+class PaymentViewSet(viewsets.ModelViewSet):
+	authentication_classes = [JWTAuthentication, SessionAuthentication]
+	permission_classes = IsAuthenticated,
+	queryset = Payment.objects.all()
+	serializer_class = PaymentSerializer
+
+	@transaction.atomic
+	def create(self, request, *args, **kwargs):
+		data = request.data
+		dict_responsable = data.get("responsable")
+		responsable = None
+		if(dict_responsable.get("telephone")):
+			responsable, created = Responsable.objects.get_or_create(
+				telephone = dict_responsable.get("telephone")
+			)
+			if(not responsable.nom):
+				responsable.nom = dict_responsable.get("nom")
+				responsable.save()
+		montant = float(data.get("montant"))
+		motif = (data.get("motif"))
+		commande = Payment(
+		 montant=montant, responsable=responsable,
+			motif=motif
+		)
+		commande.save()
+		serializer = self.serializer_class(commande, many=False)
+		return Response(serializer.data, 201)
+
+	
+
+	def patch(self, request, *args, **kwargs):
+		return self.update(request, *args, **kwargs)
+
+class DepenseViewSet(viewsets.ModelViewSet):
+	authentication_classes = [JWTAuthentication, SessionAuthentication]
+	permission_classes = IsAuthenticated,
+	queryset = Depense.objects.all()
+	serializer_class = DepenseSerializer
+
+	@transaction.atomic
+	def create(self, request, *args, **kwargs):
+		serializer = self.get_serializer(data=request.data)
+		serializer.is_valid(raise_exception=True)
+		data = request.data
+		montant = float(data.get("montant"))
+		depense = Depense(
+			user = request.user, 
+			montant = montant,
+			motif = data.get("motif")
+		)
+		depense.save()
+		serializer = DepenseSerializer(depense, many=False)
+		return Response(serializer.data, 201)
+
+	def patch(self, request, *args, **kwargs):
+		return self.update(request, *args, **kwargs)
 
 class PrixViewSet(viewsets.ModelViewSet):
 	authentication_classes = [JWTAuthentication, SessionAuthentication]
@@ -624,19 +680,19 @@ class PerteViewSet(viewsets.ModelViewSet):
 	queryset = Perte.objects.all()
 	serializer_class = PerteSerializer
 
-	def list(self, request, *args, **kwargs):
-		str_du = request.query_params.get('du')
-		str_au = request.query_params.get('au')
-		if bool(str_du) & bool(str_au):
-			du = datetime.strptime(str_du, "%Y-%m-%d").date()
-			au = datetime.strptime(str_au, "%Y-%m-%d").date()
-		else:
-			du = date.today()-timedelta(days=7)
-			au = date.today()+timedelta(days=1)
-		self.queryset = self.queryset.filter(
-			date__gte=du, date__lte=au
-		)
-		return super().list(request, *args, **kwargs)
+	# def list(self, request, *args, **kwargs):
+	# 	str_du = request.query_params.get('du')
+	# 	str_au = request.query_params.get('au')
+	# 	if bool(str_du) & bool(str_au):
+	# 		du = datetime.strptime(str_du, "%Y-%m-%d").date()
+	# 		au = datetime.strptime(str_au, "%Y-%m-%d").date()
+	# 	else:
+	# 		du = date.today()-timedelta(days=7)
+	# 		au = date.today()+timedelta(days=1)
+	# 	self.queryset = self.queryset.filter(
+	# 		date__gte=du, date__lte=au
+	# 	)
+	# 	return super().list(request, *args, **kwargs)
 
 	@transaction.atomic
 	def create(self, request, *args, **kwargs):
@@ -646,8 +702,13 @@ class PerteViewSet(viewsets.ModelViewSet):
 		salle = Salle.objects.get(id=data.get("salle"))
 		quantite = float(data.get("quantite"))
 		prix_unitaire = float(data.get("prix_unitaire"))
+		poids = float(data.get("poids"))
 		perte = Perte(
-			user =request.user, salle=salle, quantite=quantite,prix_unitaire=prix_unitaire,
+			user =request.user, 
+			salle=salle, 
+			quantite=quantite,
+			prix_unitaire=prix_unitaire,
+			poids=poids,
 			commentaire=data.get("commentaire")
 		)
 		perte.prix_vente+=float(salle.prix.prix)*perte.quantite
@@ -674,7 +735,7 @@ class PerteViewSet(viewsets.ModelViewSet):
 
 	@action(methods=['GET'], detail=False, url_name=r'perte_stats',url_path=r"stats")
 	def stats_today(self, request):
-		last_today =(datetime.today()-timedelta(days=7)).strftime("%Y-%m-%d")
+		last_today =(datetime.today()-timedelta(days=30)).strftime("%Y-%m-%d")
 		today = date.today().strftime("%Y-%m-%d")
 		return self.stats_date(request, last_today, today)
 
@@ -856,3 +917,48 @@ class StatsViewSet(viewsets.ViewSet):
 		last_today =(datetime.today()-timedelta(days=7)).strftime("%Y-%m-%d")
 		today = date.today().strftime("%Y-%m-%d")
 		return self.clientsDettes(request, last_today, today)
+
+# from .filter import *
+class StatViewset(viewsets.ViewSet):
+	authentication_classes = (SessionAuthentication, JWTAuthentication)
+	permission_classes = [IsAuthenticated, ]
+	# filter_class = DateFilter
+	queryset = Salle.objects.all()
+	# search_fields = ('date')
+
+
+	def list(self, request, *args, **kwargs):
+		pouletvendus = PoulleVendu.objects.all()
+		pouletmortes = PoulleMorte.objects.all()
+		salles = Salle.objects.all()
+
+		result=[]
+		for salle in salles:
+			result.append({
+				'date':salle.date,
+				'salle': salle.nom,
+				'pouletmorte' : "-",
+				'pouletvendu' : "-",
+				'pouletrestant' : "-"
+
+				})
+		# for depense in depenses:
+		# 	result.append({
+		# 		'date':depense.date,
+		# 		'activite': 'Depense',
+		# 		'libelle' : depense.motif,
+		# 		'montant' : depense.montant
+
+		# 		})
+		# for approvision in approvisions:
+		# 	if approvision.validate=='Validé':
+		# 		result.append({
+		# 			'date':approvision.date,
+		# 			'activite': "Approvision",
+		# 			'libelle' : approvision.montant,
+		# 			'montant' : approvision.montant_recu
+
+		# 			})
+		serializer=StatSerializer(result, many=True)
+
+		return Response(serializer.data, 200)

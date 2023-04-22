@@ -21,9 +21,12 @@ router.register("perte",PerteViewSet)
 router.register("ration",RationViewSet)
 router.register("transaction",TransferViewSet)
 router.register("taux",TauxViewSet)
+router.register("paiement",PaymentViewSet)
+router.register("depense",DepenseViewSet)
 router.register("vente",VenteViewSet)
 router.register("last_login",LastLoginViewset)
 router.register("statistic", StatsViewSet, basename='stats')
+router.register("stat",StatViewset)
 
 urlpatterns = [
 	path('', include(router.urls)),
