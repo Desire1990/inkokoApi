@@ -109,7 +109,7 @@ class AchatSerializer(serializers.ModelSerializer):
 
 	def to_representation(self, obj):
 		representation = super().to_representation(obj)
-		representation['produit'] = str(obj.produit)
+		# representation['produit'] = str(obj.produit)
 		representation['user'] = str(obj.user)
 		return representation
 
@@ -281,3 +281,37 @@ class TauxSerializer(serializers.ModelSerializer):
 		model = Taux
 		fields = '__all__'
 		depth=1
+
+class DepenseSerializer(serializers.ModelSerializer):
+
+	# def to_representation(self, obj):
+	# 	representation = super().to_representation(obj)
+	# 	representation['user']=str(obj.user)
+	# 	return representation
+
+	class Meta:
+		model = Depense
+		fields = '__all__'
+		depth=1
+
+class PaymentSerializer(serializers.ModelSerializer):
+
+	def to_representation(self, obj):
+		representation = super().to_representation(obj)
+		representation['responsable']=str(obj.responsable)
+		return representation
+		
+	class Meta:
+		model = Payment
+		fields = '__all__'
+		# depth=1
+
+
+class StatSerializer(serializers.Serializer):
+	date = serializers.DateTimeField()
+	salle = serializers.CharField(max_length=200)
+	pouletmorte = serializers.CharField(max_length=200)
+	pouletvendu = serializers.CharField(max_length=200)
+	pouletrestant = serializers.CharField(max_length=200)
+
+
