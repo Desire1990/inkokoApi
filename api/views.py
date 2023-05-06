@@ -138,7 +138,7 @@ class SalleViewSet(viewsets.ModelViewSet):
 	@transaction.atomic
 	def create(self, request):
 		data = request.data
-		prix:PouletPrix=PouletPrix.objects.all().latest('id')
+		# prix:PouletPrix=PouletPrix.objects.all().latest('id')
 		dict_responsable = data.get("responsable")
 		responsable = None
 		if(dict_responsable.get("telephone")):
@@ -157,7 +157,7 @@ class SalleViewSet(viewsets.ModelViewSet):
 			responsable=responsable,
 			type_poulle=type_poulle,
 			quantite=quantite,
-			prix=prix
+			# prix=prix
 			)
 		salle.save()
 		serializer = SalleSerializer(salle, many=False, context={"request":request}).data
