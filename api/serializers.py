@@ -27,13 +27,13 @@ class TokenPairSerializer(TokenObtainPairSerializer):
 		data['groups'] = self.getGroups(self.user)
 		data['username'] = self.user.username
 		data['id'] = self.user.id
-		logins = LastLogin.objects.all()
-		if(logins):
-			last_login = logins.first()
-			last_login.date = timezone.now()
-			last_login.save()
-		else:
-			LastLogin().save()
+		# logins = LastLogin.objects.all()
+		# if(logins):
+		# 	last_login = logins.first()
+		# 	last_login.date = timezone.now()
+		# 	last_login.save()
+		# else:
+		# 	LastLogin().save()
 		return data
 
 class GroupSerializer(serializers.ModelSerializer):
@@ -124,16 +124,16 @@ class AchatSerializer(serializers.ModelSerializer):
 
 class VenteSerializer(serializers.ModelSerializer):
 	commande_id = serializers.SerializerMethodField()
-	produit_id = serializers.SerializerMethodField()
+	# produit_id = serializers.SerializerMethodField()
 
 	def to_representation(self, obj):
 		representation = super().to_representation(obj)
-		representation['produit'] = str(obj.produit)
+		# representation['produit'] = str(obj.produit)
 		representation['commande'] = str(obj.commande)
 		return representation
 
-	def get_produit_id(self, obj):
-		return obj.produit.id
+	# def get_produit_id(self, obj):
+	# 	return obj.produit.id
 
 	def get_commande_id(self, obj):
 		return obj.commande.id	
@@ -141,6 +141,7 @@ class VenteSerializer(serializers.ModelSerializer):
 	class Meta:
 		model = Vente
 		fields = '__all__'
+		depth=1
 
 class RationSerializer(serializers.ModelSerializer):
 	user_id = serializers.SerializerMethodField()
@@ -151,13 +152,13 @@ class RationSerializer(serializers.ModelSerializer):
 		representation = super(RationSerializer, self).to_representation(obj)
 		representation['user'] = str(obj.user)
 		representation['responsable'] = str(obj.responsable)
-		last_login = LastLogin.objects.first()
-		try:
-			last_login = LastLogin.objects.first()
-			last_login.date = timezone.now()
-		except:
-			last_login = LastLogin()
-			last_login.save()
+		# last_login = LastLogin.objects.first()
+		# try:
+		# 	last_login = LastLogin.objects.first()
+		# 	last_login.date = timezone.now()
+		# except:
+		# 	last_login = LastLogin()
+		# 	last_login.save()
 		return representation
 
 	def get_user_id(self, obj):
@@ -221,13 +222,13 @@ class OeufVenduSerializer(serializers.ModelSerializer):
 		representation['user'] = str(obj.user)
 		representation['client'] = str(obj.client)
 		representation['prix'] = str(obj.prix)
-		last_login = LastLogin.objects.first()
-		try:
-			last_login = LastLogin.objects.first()
-			last_login.date = timezone.now()
-		except:
-			last_login = LastLogin()
-			last_login.save()
+		# last_login = LastLogin.objects.first()
+		# try:
+		# 	last_login = LastLogin.objects.first()
+		# 	last_login.date = timezone.now()
+		# except:
+		# 	last_login = LastLogin()
+		# 	last_login.save()
 		return representation
 
 	def get_user_id(self, obj):
