@@ -58,7 +58,7 @@ class PouletPrix(models.Model):
 class Salle(models.Model):
 	id = models.SmallAutoField(primary_key=True)
 	responsable = models.ForeignKey(Responsable, on_delete=models.PROTECT)
-	prix = models.ForeignKey(PouletPrix, on_delete=models.PROTECT)
+	# prix = models.ForeignKey(PouletPrix, on_delete=models.PROTECT)
 	nom = models.CharField(max_length=200, null=False, blank=False, unique=True)
 	type_poulle = models.CharField(max_length= 200, choices=type_poulet)
 	quantite = models.FloatField(default=0)
@@ -100,7 +100,7 @@ class Oeuf(models.Model):
 
 class Produit(models.Model):
 	id = models.SmallAutoField(primary_key=True) 
-	nom = models.CharField(max_length=200)
+	nom = models.CharField(max_length=200, unique=True)
 	quantite = models.FloatField(default = 0)
 	unite = models.CharField(max_length=64, verbose_name='unité de mesure')
 	prix_unitaire = models.FloatField(default=0)
