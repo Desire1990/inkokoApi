@@ -711,7 +711,7 @@ class PerteViewSet(viewsets.ModelViewSet):
 			poids=poids,
 			commentaire=data.get("commentaire")
 		)
-		perte.prix_vente+=float(salle.prix.prix)*perte.quantite
+		perte.prix_vente+=float(prix_unitaire)*perte.poids
 		salle.quantite -= perte.quantite
 		perte.save()
 		salle.save()
