@@ -124,16 +124,16 @@ class AchatSerializer(serializers.ModelSerializer):
 
 class VenteSerializer(serializers.ModelSerializer):
 	commande_id = serializers.SerializerMethodField()
-	# produit_id = serializers.SerializerMethodField()
+	produit_id = serializers.SerializerMethodField()
 
 	def to_representation(self, obj):
 		representation = super().to_representation(obj)
-		# representation['produit'] = str(obj.produit)
+		representation['produit'] = str(obj.produit)
 		representation['commande'] = str(obj.commande)
 		return representation
 
-	# def get_produit_id(self, obj):
-	# 	return obj.produit.id
+	def get_produit_id(self, obj):
+		return obj.produit.id
 
 	def get_commande_id(self, obj):
 		return obj.commande.id	
